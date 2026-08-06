@@ -1,0 +1,1048 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <title>My Expenses</title>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <style>
+      *, *::before, *::after {
+        margin: 0; padding: 0; box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent;
+      }
+      html { -webkit-text-size-adjust: 100%; }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: #f3f4f6; color: #111827; min-height: 100vh;
+        padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+      }
+
+      /* ── LOGIN ── */
+      #loginScreen {
+        position: fixed; inset: 0; z-index: 999;
+        background: linear-gradient(160deg, #7c3aed, #4f46e5);
+        display: flex; align-items: center; justify-content: center;
+      }
+      .login-box {
+        background: white; border-radius: 24px; padding: 40px 28px;
+        width: 88%; max-width: 360px; text-align: center;
+        box-shadow: 0 24px 48px rgba(0,0,0,0.25);
+      }
+      .login-emoji { font-size: 52px; margin-bottom: 12px; }
+      .login-title { font-size: 22px; font-weight: 800; color: #111827; margin-bottom: 4px; }
+      .login-sub   { font-size: 13px; color: #6b7280; margin-bottom: 28px; }
+      .login-box input {
+        width: 100%; padding: 14px 16px; border: 2px solid #e5e7eb; border-radius: 12px;
+        font-size: 16px; outline: none; margin-bottom: 14px;
+        transition: border-color 0.2s; font-family: inherit;
+      }
+      .login-box input:focus { border-color: #7c3aed; }
+      .login-go {
+        width: 100%; padding: 15px;
+        background: linear-gradient(135deg, #7c3aed, #4f46e5);
+        color: white; border: none; border-radius: 12px;
+        font-size: 16px; font-weight: 700; cursor: pointer; font-family: inherit;
+      }
+      .login-err { color: #dc2626; font-size: 13px; margin-top: 10px; min-height: 18px; }
+
+      /* ── HEADER ── */
+      .header {
+        background: linear-gradient(135deg, #7c3aed, #4f46e5); color: white;
+        padding: calc(44px + env(safe-area-inset-top, 0px)) 16px 14px;
+        position: sticky; top: 0; z-index: 90;
+      }
+      .header-top {
+        display: flex; align-items: center; justify-content: space-between;
+        margin-bottom: 12px;
+      }
+      .header-title { font-size: 18px; font-weight: 800; }
+      .logout-btn {
+        background: rgba(255,255,255,0.18); border: none; color: white;
+        padding: 6px 14px; border-radius: 20px; font-size: 13px;
+        cursor: pointer; font-weight: 600; font-family: inherit;
+      }
+      .month-nav {
+        display: flex; align-items: center; justify-content: center; gap: 14px;
+      }
+      .nav-arrow {
+        background: rgba(255,255,255,0.18); border: none; color: white;
+        width: 38px; height: 38px; border-radius: 50%; font-size: 22px;
+        cursor: pointer; display: flex; align-items: center; justify-content: center;
+        font-family: inherit;
+      }
+      #monthLabel { font-size: 17px; font-weight: 700; min-width: 150px; text-align: center; }
+
+      /* ── SUMMARY CARD ── */
+      .summary-card {
+        margin: 14px 14px 0; background: white; border-radius: 16px;
+        padding: 16px; box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+      }
+      .sum-row {
+        display: grid; grid-template-columns: 1fr 1fr 1fr;
+        gap: 8px; margin-bottom: 10px;
+      }
+      .s-item { text-align: center; }
+      .s-label {
+        font-size: 10px; color: #6b7280; text-transform: uppercase;
+        letter-spacing: 0.6px; margin-bottom: 3px;
+      }
+      .s-val    { font-size: 15px; font-weight: 800; }
+      .s-income { color: #059669; }
+      .s-spent  { color: #dc2626; }
+      .s-remain { color: #4f46e5; }
+      .s-over   { color: #dc2626; }
+      .sum-sub {
+        display: flex; justify-content: space-between;
+        font-size: 12px; color: #6b7280;
+        padding: 8px 0; border-top: 1px solid #f3f4f6; margin-bottom: 10px;
+      }
+      .sum-sub b { color: #111827; }
+      .progress-track { background: #f3f4f6; border-radius: 8px; height: 7px; overflow: hidden; }
+      .progress-fill {
+        height: 100%; border-radius: 8px; width: 0%;
+        background: linear-gradient(90deg, #7c3aed, #4f46e5);
+        transition: width 0.35s ease, background 0.35s ease;
+      }
+      .progress-meta {
+        display: flex; justify-content: space-between;
+        font-size: 11px; color: #9ca3af; margin-top: 5px;
+      }
+
+      /* ── SECTION LABEL ── */
+      .sec-label {
+        font-size: 11px; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.8px; color: #6b7280; margin: 18px 14px 8px;
+      }
+
+      /* ── FIXED GRID ── */
+      .fixed-grid {
+        display: grid; grid-template-columns: 1fr 1fr;
+        gap: 8px; margin: 0 14px;
+      }
+      .fixed-card {
+        background: white; border-radius: 12px; padding: 12px;
+        box-shadow: 0 1px 6px rgba(0,0,0,0.05);
+      }
+      .fc-head {
+        display: flex; align-items: center; gap: 8px; margin-bottom: 9px;
+      }
+      .fc-icon {
+        width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0;
+        display: flex; align-items: center; justify-content: center; font-size: 15px;
+      }
+      .fc-name { font-size: 12px; font-weight: 700; color: #374151; }
+      .fc-amt-wrap {
+        display: flex; align-items: center;
+        background: #f9fafb; border: 2px solid #e5e7eb; border-radius: 8px;
+        overflow: hidden; margin-bottom: 6px; transition: border-color 0.2s;
+      }
+      .fc-amt-wrap:focus-within { border-color: #7c3aed; }
+      .fc-rs {
+        padding: 0 6px; font-size: 13px; font-weight: 700; color: #6b7280;
+        background: #f3f4f6; height: 36px; display: flex; align-items: center;
+        border-right: 1px solid #e5e7eb;
+      }
+      .fc-inp {
+        flex: 1; border: none; background: transparent;
+        padding: 0 7px; font-size: 14px; font-weight: 700; color: #111827;
+        outline: none; height: 36px; width: 0; min-width: 0; font-family: inherit;
+      }
+      .fc-date-label {
+        font-size: 10px; font-weight: 600; color: #9ca3af;
+        text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 4px;
+      }
+      .fc-date {
+        width: 100%; border: 2px solid #e5e7eb; border-radius: 8px;
+        padding: 6px 8px; font-size: 12px; color: #374151;
+        outline: none; background: #f9fafb; font-family: inherit;
+        transition: border-color 0.2s;
+      }
+      .fc-date:focus { border-color: #7c3aed; }
+      .save-fixed-btn {
+        width: 100%; padding: 12px;
+        background: white; color: #7c3aed;
+        border: 2px solid #7c3aed; border-radius: 12px;
+        font-size: 14px; font-weight: 700; cursor: pointer;
+        font-family: inherit; margin-top: 10px;
+        transition: background 0.2s, color 0.2s;
+      }
+      .save-fixed-btn:active { background: #7c3aed; color: white; }
+      .save-fixed-btn:disabled { opacity: 0.6; }
+
+      /* ── EXPENSES SECTION ── */
+      .expenses-header {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 18px 14px 0;
+      }
+      .add-exp-btn {
+        background: linear-gradient(135deg, #7c3aed, #4f46e5);
+        color: white; border: none; border-radius: 20px;
+        padding: 8px 18px; font-size: 14px; font-weight: 700;
+        cursor: pointer; font-family: inherit;
+      }
+
+      /* ── FILTER CHIPS ── */
+      .filter-chips {
+        display: flex; gap: 7px; overflow-x: auto;
+        padding: 10px 14px 10px; scrollbar-width: none;
+      }
+      .filter-chips::-webkit-scrollbar { display: none; }
+      .chip {
+        flex-shrink: 0; padding: 7px 13px; border-radius: 20px;
+        border: 2px solid #e5e7eb; background: white;
+        font-size: 13px; font-weight: 600; cursor: pointer;
+        color: #6b7280; white-space: nowrap; font-family: inherit;
+        transition: all 0.15s;
+      }
+      .chip.active { background: #7c3aed; border-color: #7c3aed; color: white; }
+
+      /* ── ENTRY ROW ── */
+      .entry-row {
+        display: flex; align-items: center; gap: 10px;
+        background: white; margin: 0 14px 6px;
+        border-radius: 12px; padding: 11px 12px;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.05); cursor: pointer;
+        transition: transform 0.1s;
+      }
+      .entry-row:active { transform: scale(0.99); }
+      .entry-date {
+        font-size: 11px; font-weight: 700; color: #6b7280;
+        min-width: 38px; text-align: center; line-height: 1.3; flex-shrink: 0;
+      }
+      .entry-icon {
+        width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0;
+        display: flex; align-items: center; justify-content: center; font-size: 18px;
+      }
+      .entry-info { flex: 1; min-width: 0; }
+      .entry-note {
+        font-size: 14px; font-weight: 600;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      .entry-sub { font-size: 11px; color: #6b7280; margin-top: 1px; }
+      .entry-amt { font-size: 15px; font-weight: 800; color: #111827; flex-shrink: 0; }
+      .entry-del {
+        width: 28px; height: 28px; border-radius: 6px; flex-shrink: 0;
+        background: #fee2e2; color: #dc2626; border: none;
+        font-size: 18px; cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+      }
+      .empty-msg {
+        text-align: center; padding: 40px 20px;
+        font-size: 14px; color: #9ca3af; line-height: 1.9;
+      }
+
+      /* ── BOTTOM NAV ── */
+      .bottom-nav {
+        position: fixed; bottom: 0; left: 0; right: 0;
+        height: calc(60px + env(safe-area-inset-bottom, 0px));
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+        background: white; border-top: 1px solid #e5e7eb;
+        display: flex; z-index: 80;
+      }
+      .nav-tab {
+        flex: 1; display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        border: none; background: none; cursor: pointer;
+        gap: 2px; font-family: inherit; transition: background 0.15s;
+      }
+      .nav-tab:active { background: #f3f4f6; }
+      .tab-icon  { font-size: 20px; }
+      .tab-label { font-size: 11px; font-weight: 600; color: #9ca3af; }
+      .nav-tab.active .tab-label { color: #7c3aed; }
+
+      /* ── SUMMARY TAB ── */
+      .sum-tab-filters {
+        display: flex; gap: 7px; overflow-x: auto;
+        padding: 14px 14px 6px; scrollbar-width: none;
+      }
+      .sum-tab-filters::-webkit-scrollbar { display: none; }
+      .smc {
+        margin: 0 14px 8px; background: white; border-radius: 14px;
+        overflow: hidden; box-shadow: 0 1px 6px rgba(0,0,0,0.05);
+      }
+      .smc-top {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 14px 16px; cursor: pointer;
+      }
+      .smc-month { font-size: 15px; font-weight: 700; }
+      .smc-total { font-size: 13px; color: #6b7280; margin-top: 2px; }
+      .smc-pct   { font-size: 16px; font-weight: 800; }
+      .smc-arrow { font-size: 18px; color: #9ca3af; text-align: right; margin-top: 4px; }
+      .smc-bar   { height: 4px; background: #f3f4f6; }
+      .smc-fill  { height: 100%; transition: width 0.3s ease; }
+      .smc-break { padding: 12px 16px 14px; border-top: 1px solid #f3f4f6; }
+      .smb-row {
+        display: flex; align-items: center; gap: 8px;
+        padding: 5px 0; font-size: 13px;
+      }
+      .smb-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+      .smb-name { flex: 1; color: #374151; }
+      .smb-amt  { font-weight: 700; color: #111827; }
+      .smb-divider {
+        border: none; border-top: 1px dashed #e5e7eb;
+        margin: 6px 0;
+      }
+
+      /* ── ADD/EDIT MODAL ── */
+      #modalOverlay {
+        position: fixed; inset: 0; z-index: 300;
+        background: rgba(0,0,0,0.45);
+        display: flex; align-items: flex-end;
+      }
+      .modal-sheet {
+        background: white; border-radius: 20px 20px 0 0;
+        padding: 0 16px calc(24px + env(safe-area-inset-bottom, 0px));
+        width: 100%; max-height: 90vh; overflow-y: auto;
+        animation: slideUp 0.28s ease;
+      }
+      @keyframes slideUp {
+        from { transform: translateY(100%); }
+        to   { transform: translateY(0); }
+      }
+      .modal-handle {
+        width: 40px; height: 4px; border-radius: 2px;
+        background: #e5e7eb; margin: 12px auto 18px;
+      }
+      .modal-title { font-size: 18px; font-weight: 800; margin-bottom: 16px; }
+      .modal-cat-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+      .mchip {
+        padding: 8px 14px; border-radius: 20px;
+        border: 2px solid #e5e7eb; background: white;
+        font-size: 13px; font-weight: 600; cursor: pointer;
+        color: #374151; font-family: inherit; transition: all 0.15s;
+      }
+      .mchip.selected { background: var(--cc); border-color: var(--cc); color: white; }
+      .mf-label {
+        display: block; font-size: 12px; font-weight: 700; color: #6b7280;
+        text-transform: uppercase; letter-spacing: 0.5px;
+        margin-bottom: 6px; margin-top: 14px;
+      }
+      .mf-input {
+        width: 100%; border: 2px solid #e5e7eb; border-radius: 10px;
+        padding: 12px 14px; font-size: 16px; outline: none;
+        background: #f9fafb; color: #111827; font-family: inherit;
+        transition: border-color 0.2s;
+      }
+      .mf-input:focus { border-color: #7c3aed; }
+      .modal-save-btn {
+        width: 100%; padding: 15px; margin-top: 20px;
+        background: linear-gradient(135deg, #7c3aed, #4f46e5);
+        color: white; border: none; border-radius: 14px;
+        font-size: 16px; font-weight: 800; cursor: pointer; font-family: inherit;
+      }
+      .modal-del-btn {
+        width: 100%; padding: 13px; margin-top: 8px;
+        background: white; color: #dc2626;
+        border: 2px solid #fca5a5; border-radius: 14px;
+        font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit;
+      }
+
+      /* ── TOAST ── */
+      #toast {
+        position: fixed; bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+        left: 50%; transform: translateX(-50%);
+        background: #111827; color: white;
+        padding: 10px 22px; border-radius: 50px;
+        font-size: 14px; font-weight: 600; z-index: 999;
+        opacity: 0; transition: opacity 0.3s;
+        white-space: nowrap; pointer-events: none;
+      }
+      #toast.show { opacity: 1; }
+
+      /* ── LOADER ── */
+      #loadingOverlay {
+        position: fixed; inset: 0; background: rgba(255,255,255,0.65);
+        display: none; align-items: center; justify-content: center; z-index: 500;
+      }
+      .spinner {
+        width: 40px; height: 40px; border: 4px solid #e5e7eb;
+        border-top-color: #7c3aed; border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+  </head>
+  <body>
+
+    <!-- ── LOGIN ── -->
+    <div id="loginScreen">
+      <div class="login-box">
+        <div class="login-emoji">💸</div>
+        <div class="login-title">My Expenses</div>
+        <div class="login-sub">Personal monthly tracker</div>
+        <input type="password" id="pwInput" placeholder="Enter password"
+               onkeydown="if(event.key==='Enter')doLogin()">
+        <button class="login-go" onclick="doLogin()">Login</button>
+        <div class="login-err" id="loginErr"></div>
+      </div>
+    </div>
+
+    <!-- ── APP ── -->
+    <div id="app" style="display:none">
+
+      <!-- Header -->
+      <div class="header">
+        <div class="header-top">
+          <span class="header-title">💸 My Expenses</span>
+          <button class="logout-btn" onclick="doLogout()">Logout</button>
+        </div>
+        <div class="month-nav" id="monthNav">
+          <button class="nav-arrow" onclick="changeMonth(-1)">&#8249;</button>
+          <span id="monthLabel"></span>
+          <button class="nav-arrow" onclick="changeMonth(1)">&#8250;</button>
+        </div>
+      </div>
+
+      <!-- ════ TAB: THIS MONTH ════ -->
+      <div id="tabMonth">
+
+        <!-- Budget bar -->
+        <div class="summary-card">
+          <div class="sum-row">
+            <div class="s-item">
+              <div class="s-label">Income</div>
+              <div class="s-val s-income">&#8377;71,000</div>
+            </div>
+            <div class="s-item">
+              <div class="s-label">Spent</div>
+              <div class="s-val s-spent" id="sumSpent">&#8377;0</div>
+            </div>
+            <div class="s-item">
+              <div class="s-label" id="sumLabel">Remaining</div>
+              <div class="s-val s-remain" id="sumRemain">&#8377;71,000</div>
+            </div>
+          </div>
+          <div class="sum-sub">
+            <span>Fixed: <b id="sumFixed">&#8377;0</b></span>
+            <span>Expenses: <b id="sumVar">&#8377;0</b></span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill" id="progressFill"></div>
+          </div>
+          <div class="progress-meta">
+            <span id="progressPct">0% used</span>
+            <span id="progressStatus">Within budget</span>
+          </div>
+        </div>
+
+        <!-- Fixed Monthly -->
+        <div class="sec-label">Fixed Monthly</div>
+        <div class="fixed-grid" id="fixedGrid"><!-- built by JS --></div>
+        <div style="padding: 0 14px">
+          <button class="save-fixed-btn" id="saveFixedBtn" onclick="saveFixed()">
+            Save Fixed Expenses
+          </button>
+        </div>
+
+        <!-- Variable Expenses -->
+        <div class="expenses-header">
+          <div class="sec-label" style="margin:0">Expenses</div>
+          <button class="add-exp-btn" onclick="openModal(null)">+ Add</button>
+        </div>
+        <div class="filter-chips" id="filterChips">
+          <button class="chip active" data-cat="all" onclick="filterBy('all')">All</button>
+          <!-- rest built by JS -->
+        </div>
+        <div id="entriesList"></div>
+
+      </div><!-- /tabMonth -->
+
+      <!-- ════ TAB: SUMMARY ════ -->
+      <div id="tabSummary" style="display:none">
+        <div class="sum-tab-filters" id="sumFilterChips">
+          <button class="chip active" data-cat="all" onclick="sumFilterBy('all')">All</button>
+          <!-- rest built by JS -->
+        </div>
+        <div id="summaryList"></div>
+      </div>
+
+      <!-- Bottom Nav -->
+      <div class="bottom-nav">
+        <button class="nav-tab active" id="navMonth" onclick="switchTab('month')">
+          <div class="tab-icon">📅</div>
+          <div class="tab-label">This Month</div>
+        </button>
+        <button class="nav-tab" id="navSummary" onclick="switchTab('summary')">
+          <div class="tab-icon">📊</div>
+          <div class="tab-label">Summary</div>
+        </button>
+      </div>
+
+    </div><!-- /app -->
+
+    <!-- ── ADD / EDIT MODAL ── -->
+    <div id="modalOverlay" style="display:none" onclick="if(event.target===this)closeMod()">
+      <div class="modal-sheet">
+        <div class="modal-handle"></div>
+        <div class="modal-title" id="modalTitle">Add Expense</div>
+        <div class="modal-cat-chips" id="modalCatChips"><!-- built by JS --></div>
+        <label class="mf-label">Date</label>
+        <input class="mf-input" type="date" id="m_date">
+        <label class="mf-label">Amount (&#8377;)</label>
+        <input class="mf-input" type="text" inputmode="numeric" id="m_amount" placeholder="0">
+        <label class="mf-label">Note <span style="font-weight:400;color:#9ca3af">(optional)</span></label>
+        <input class="mf-input" type="text" id="m_note" placeholder="e.g. Pushpa 2, Dinner at hotel...">
+        <button class="modal-save-btn" id="modalSaveBtn" onclick="saveEntry()">Add Expense</button>
+        <button class="modal-del-btn" id="modalDelBtn" style="display:none" onclick="deleteFromModal()">
+          Delete This Expense
+        </button>
+      </div>
+    </div>
+
+    <div id="toast"></div>
+    <div id="loadingOverlay"><div class="spinner"></div></div>
+
+    <script>
+      // ── FIREBASE ──
+      // Same project as business app; personal data in separate collections
+      const firebaseConfig = {
+        apiKey: "AIzaSyCDtlkYRdas8mURw3OmQRqBG-M2TQZYs6c",
+        authDomain: "disposable-business-559f2.firebaseapp.com",
+        projectId: "disposable-business-559f2",
+        storageBucket: "disposable-business-559f2.firebasestorage.app",
+        messagingSenderId: "345880664024",
+        appId: "1:345880664024:web:fa0f173bd03d5ba15bc4ad",
+      };
+      firebase.initializeApp(firebaseConfig);
+      const db = firebase.firestore();
+
+      // ── CONFIG ──
+      const INCOME   = 71000;
+      const PASSWORD = "MvTally@123"; // Change this anytime
+      const COL_VAR   = "personal_expenses"; // individual expense entries
+      const COL_FIXED = "personal_fixed";    // fixed monthly (one doc per month)
+
+      // ── CATEGORY DEFINITIONS ──
+      const FIXED_CATS = [
+        { id: "rent",        label: "House Rent",   icon: "🏠", color: "#6366f1", bg: "#eef2ff" },
+        { id: "electricity", label: "Electricity",  icon: "⚡", color: "#f59e0b", bg: "#fffbeb" },
+        { id: "maintenance", label: "Maintenance",  icon: "🔧", color: "#10b981", bg: "#ecfdf5" },
+        { id: "petrol",      label: "Bike Petrol",  icon: "⛽", color: "#ef4444", bg: "#fef2f2" },
+      ];
+
+      const CATS = [
+        { id: "vegetables", label: "Vegetables",      icon: "🥬", color: "#059669", bg: "#ecfdf5" },
+        { id: "dmart",      label: "D-Mart",          icon: "🛒", color: "#3b82f6", bg: "#eff6ff" },
+        { id: "food",       label: "Food / Cafe",     icon: "🍽️", color: "#f97316", bg: "#fff7ed" },
+        { id: "movies",     label: "Movies",          icon: "🎬", color: "#8b5cf6", bg: "#f5f3ff" },
+        { id: "trips",      label: "Trips",           icon: "✈️", color: "#06b6d4", bg: "#ecfeff" },
+        { id: "purchases",  label: "Purchases",       icon: "🛍️", color: "#ec4899", bg: "#fdf2f8" },
+        { id: "schemes",    label: "Schemes",         icon: "💰", color: "#eab308", bg: "#fefce8" },
+        { id: "savings",    label: "Savings",         icon: "🏦", color: "#10b981", bg: "#ecfdf5" },
+      ];
+
+      const MN  = ["January","February","March","April","May","June",
+                   "July","August","September","October","November","December"];
+      const MNS = ["Jan","Feb","Mar","Apr","May","Jun",
+                   "Jul","Aug","Sep","Oct","Nov","Dec"];
+
+      // ── STATE ──
+      let yr, mo;
+      let currentTab   = "month";
+      let allEntries   = [];     // variable entries for current month
+      let fixedData    = {};     // fixed data for current month
+      let filterCat    = "all";
+      let editingId    = null;
+      let modalCat     = null;
+      let sumFilterCat = "all";
+      let _summaries   = [];
+
+      // ── INIT ──
+      window.onload = () => {
+        const now = new Date();
+        yr = now.getFullYear();
+        mo = now.getMonth();
+        buildFixedGrid();
+        buildFilterChips();
+        buildModalCats();
+        if (sessionStorage.getItem("auth") === "1") openApp();
+      };
+
+      // ── BUILD STATIC UI ──
+      function buildFixedGrid() {
+        document.getElementById("fixedGrid").innerHTML = FIXED_CATS.map(c => `
+          <div class="fixed-card" style="border-top:3px solid ${c.color}">
+            <div class="fc-head">
+              <div class="fc-icon" style="background:${c.bg}">${c.icon}</div>
+              <div class="fc-name">${c.label}</div>
+            </div>
+            <div class="fc-amt-wrap">
+              <span class="fc-rs">&#8377;</span>
+              <input class="fc-inp" type="text" inputmode="numeric"
+                     id="f_${c.id}" placeholder="0" oninput="recalcBar()">
+            </div>
+            <div class="fc-date-label">Date paid</div>
+            <input class="fc-date" type="date" id="fd_${c.id}">
+          </div>`).join("");
+      }
+
+      function buildFilterChips() {
+        const fc = document.getElementById("filterChips");
+        CATS.forEach(c => {
+          const btn = document.createElement("button");
+          btn.className = "chip";
+          btn.dataset.cat = c.id;
+          btn.onclick = () => filterBy(c.id);
+          btn.textContent = c.icon + " " + c.label;
+          fc.appendChild(btn);
+        });
+        const sc = document.getElementById("sumFilterChips");
+        CATS.forEach(c => {
+          const btn = document.createElement("button");
+          btn.className = "chip";
+          btn.dataset.cat = c.id;
+          btn.onclick = () => sumFilterBy(c.id);
+          btn.textContent = c.icon + " " + c.label;
+          sc.appendChild(btn);
+        });
+      }
+
+      function buildModalCats() {
+        document.getElementById("modalCatChips").innerHTML = CATS.map(c =>
+          `<button class="mchip" data-id="${c.id}" onclick="selectModalCat('${c.id}')"
+                   style="--cc:${c.color}">${c.icon} ${c.label}</button>`
+        ).join("");
+      }
+
+      // ── LOGIN / LOGOUT ──
+      function doLogin() {
+        const val = document.getElementById("pwInput").value;
+        if (val === PASSWORD) {
+          sessionStorage.setItem("auth", "1");
+          openApp();
+        } else {
+          document.getElementById("loginErr").textContent = "Wrong password, try again.";
+        }
+      }
+
+      function doLogout() {
+        sessionStorage.removeItem("auth");
+        document.getElementById("app").style.display = "none";
+        document.getElementById("loginScreen").style.display = "flex";
+        document.getElementById("pwInput").value = "";
+        document.getElementById("loginErr").textContent = "";
+      }
+
+      function openApp() {
+        document.getElementById("loginScreen").style.display = "none";
+        document.getElementById("app").style.display = "block";
+        setMonthLabel();
+        loadMonthData();
+      }
+
+      // ── MONTH NAV ──
+      function monthKey() {
+        return `${yr}-${String(mo + 1).padStart(2, "0")}`;
+      }
+
+      function setMonthLabel() {
+        document.getElementById("monthLabel").textContent = MN[mo] + " " + yr;
+      }
+
+      function changeMonth(dir) {
+        mo += dir;
+        if (mo < 0)  { mo = 11; yr--; }
+        if (mo > 11) { mo = 0;  yr++; }
+        setMonthLabel();
+        if (currentTab === "month") loadMonthData();
+      }
+
+      // ── TABS ──
+      function switchTab(tab) {
+        currentTab = tab;
+        document.getElementById("tabMonth").style.display   = tab === "month"   ? "block" : "none";
+        document.getElementById("tabSummary").style.display = tab === "summary" ? "block" : "none";
+        document.getElementById("navMonth").classList.toggle("active", tab === "month");
+        document.getElementById("navSummary").classList.toggle("active", tab === "summary");
+        document.getElementById("monthNav").style.display   = tab === "month"   ? "flex"  : "none";
+        if (tab === "summary") loadSummary();
+      }
+
+      // ── LOAD CURRENT MONTH ──
+      async function loadMonthData() {
+        showLoad(true);
+        try {
+          const [fixDoc, varSnap] = await Promise.all([
+            db.collection(COL_FIXED).doc(monthKey()).get(),
+            db.collection(COL_VAR).where("month", "==", monthKey()).get(),
+          ]);
+
+          fixedData = fixDoc.exists ? fixDoc.data() : {};
+          populateFixed();
+
+          allEntries = varSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+          allEntries.sort((a, b) => b.date.localeCompare(a.date));
+
+          filterCat = "all";
+          document.querySelectorAll("#filterChips .chip").forEach(b =>
+            b.classList.toggle("active", b.dataset.cat === "all")
+          );
+          renderEntries();
+          recalcBar();
+        } catch (e) {
+          console.error(e);
+          toast("Could not load. Check connection.");
+        }
+        showLoad(false);
+      }
+
+      // ── FIXED EXPENSES ──
+      function populateFixed() {
+        FIXED_CATS.forEach(c => {
+          const a = document.getElementById("f_" + c.id);
+          const d = document.getElementById("fd_" + c.id);
+          if (a) a.value = fixedData[c.id] > 0 ? fixedData[c.id] : "";
+          if (d) d.value = fixedData[c.id + "Date"] || "";
+        });
+      }
+
+      async function saveFixed() {
+        const btn = document.getElementById("saveFixedBtn");
+        btn.textContent = "Saving...";
+        btn.disabled = true;
+        const data = { month: monthKey() };
+        FIXED_CATS.forEach(c => {
+          data[c.id] = parseFloat(document.getElementById("f_" + c.id)?.value) || 0;
+          data[c.id + "Date"] = document.getElementById("fd_" + c.id)?.value || "";
+        });
+        data.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+        try {
+          await db.collection(COL_FIXED).doc(monthKey()).set(data);
+          fixedData = data;
+          recalcBar();
+          toast("Fixed expenses saved! ✓");
+        } catch (e) {
+          toast("Save failed. Check connection.");
+        }
+        btn.textContent = "Save Fixed Expenses";
+        btn.disabled = false;
+      }
+
+      // ── RENDER ENTRIES ──
+      function renderEntries() {
+        const filtered = filterCat === "all"
+          ? allEntries
+          : allEntries.filter(e => e.category === filterCat);
+
+        const container = document.getElementById("entriesList");
+        if (filtered.length === 0) {
+          container.innerHTML = `<div class="empty-msg">No expenses recorded yet.<br>Tap <b>+ Add</b> to start.</div>`;
+          return;
+        }
+        container.innerHTML = filtered.map(e => {
+          const cat = CATS.find(c => c.id === e.category) || { icon: "💸", label: "Other", bg: "#f3f4f6" };
+          return `
+            <div class="entry-row" onclick="openModal('${e.id}')">
+              <div class="entry-date">${fmtDate(e.date)}</div>
+              <div class="entry-icon" style="background:${cat.bg}">${cat.icon}</div>
+              <div class="entry-info">
+                <div class="entry-note">${esc(e.note) || cat.label}</div>
+                <div class="entry-sub">${cat.label}</div>
+              </div>
+              <div class="entry-amt">&#8377;${inr(e.amount)}</div>
+              <button class="entry-del"
+                      onclick="event.stopPropagation();delEntry('${e.id}')">&#215;</button>
+            </div>`;
+        }).join("");
+      }
+
+      function filterBy(cat) {
+        filterCat = cat;
+        document.querySelectorAll("#filterChips .chip").forEach(b =>
+          b.classList.toggle("active", b.dataset.cat === cat)
+        );
+        renderEntries();
+      }
+
+      // ── MODAL ──
+      function openModal(id) {
+        editingId = id;
+        if (id) {
+          const e = allEntries.find(x => x.id === id);
+          if (!e) return;
+          document.getElementById("modalTitle").textContent     = "Edit Expense";
+          document.getElementById("modalSaveBtn").textContent   = "Update";
+          document.getElementById("modalDelBtn").style.display  = "block";
+          modalCat = e.category;
+          document.getElementById("m_date").value   = e.date || todayStr();
+          document.getElementById("m_amount").value = e.amount || "";
+          document.getElementById("m_note").value   = e.note || "";
+        } else {
+          document.getElementById("modalTitle").textContent     = "Add Expense";
+          document.getElementById("modalSaveBtn").textContent   = "Add Expense";
+          document.getElementById("modalDelBtn").style.display  = "none";
+          modalCat = null;
+          document.getElementById("m_date").value   = todayStr();
+          document.getElementById("m_amount").value = "";
+          document.getElementById("m_note").value   = "";
+        }
+        updateModalChips();
+        document.getElementById("modalOverlay").style.display = "flex";
+      }
+
+      function closeMod() {
+        document.getElementById("modalOverlay").style.display = "none";
+      }
+
+      function selectModalCat(id) {
+        modalCat = id;
+        updateModalChips();
+      }
+
+      function updateModalChips() {
+        document.querySelectorAll(".mchip").forEach(b =>
+          b.classList.toggle("selected", b.dataset.id === modalCat)
+        );
+      }
+
+      async function saveEntry() {
+        if (!modalCat) { toast("Please select a category"); return; }
+        const amount = parseFloat(document.getElementById("m_amount").value) || 0;
+        if (!amount)   { toast("Please enter an amount"); return; }
+        const date = document.getElementById("m_date").value || todayStr();
+        const note = document.getElementById("m_note").value.trim();
+
+        const data = {
+          month: monthKey(), date, category: modalCat, amount, note,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        };
+
+        showLoad(true);
+        try {
+          if (editingId) {
+            await db.collection(COL_VAR).doc(editingId).set(data);
+            const idx = allEntries.findIndex(e => e.id === editingId);
+            if (idx >= 0) allEntries[idx] = { id: editingId, ...data };
+            toast("Updated! ✓");
+          } else {
+            const ref = await db.collection(COL_VAR).add(data);
+            allEntries.push({ id: ref.id, ...data });
+            toast("Added! ✓");
+          }
+          allEntries.sort((a, b) => b.date.localeCompare(a.date));
+          closeMod();
+          renderEntries();
+          recalcBar();
+        } catch (e) {
+          console.error(e);
+          toast("Failed. Check connection.");
+        }
+        showLoad(false);
+      }
+
+      async function deleteFromModal() {
+        if (!editingId) return;
+        closeMod();
+        await delEntry(editingId);
+      }
+
+      async function delEntry(id) {
+        showLoad(true);
+        try {
+          await db.collection(COL_VAR).doc(id).delete();
+          allEntries = allEntries.filter(e => e.id !== id);
+          renderEntries();
+          recalcBar();
+          toast("Deleted");
+        } catch (e) {
+          toast("Delete failed");
+        }
+        showLoad(false);
+      }
+
+      // ── RECALC SUMMARY BAR ──
+      function recalcBar() {
+        const fixTotal = FIXED_CATS.reduce((s, c) =>
+          s + (parseFloat(document.getElementById("f_" + c.id)?.value) || 0), 0);
+        const varTotal = allEntries.reduce((s, e) => s + (e.amount || 0), 0);
+        const total    = fixTotal + varTotal;
+        const rem      = INCOME - total;
+        const pct      = Math.min(total / INCOME * 100, 100);
+
+        document.getElementById("sumFixed").textContent  = "₹" + inr(fixTotal);
+        document.getElementById("sumVar").textContent    = "₹" + inr(varTotal);
+        document.getElementById("sumSpent").textContent  = "₹" + inr(total);
+        document.getElementById("sumRemain").textContent = "₹" + inr(Math.abs(rem));
+        document.getElementById("sumLabel").textContent  = rem >= 0 ? "Remaining" : "Over";
+        document.getElementById("sumRemain").className   = "s-val " + (rem >= 0 ? "s-remain" : "s-over");
+
+        const fill = document.getElementById("progressFill");
+        fill.style.width = pct + "%";
+        fill.style.background = pct > 90
+          ? "linear-gradient(90deg, #ef4444, #dc2626)"
+          : pct > 70
+          ? "linear-gradient(90deg, #f97316, #ea580c)"
+          : "linear-gradient(90deg, #7c3aed, #4f46e5)";
+
+        document.getElementById("progressPct").textContent    = Math.round(pct) + "% used";
+        document.getElementById("progressStatus").textContent = rem >= 0
+          ? "₹" + inr(rem) + " left"
+          : "Over by ₹" + inr(Math.abs(rem));
+      }
+
+      // ── SUMMARY TAB ──
+      async function loadSummary() {
+        showLoad(true);
+        try {
+          const [varSnap, fixSnap] = await Promise.all([
+            db.collection(COL_VAR).get(),
+            db.collection(COL_FIXED).get(),
+          ]);
+
+          const allVar = varSnap.docs.map(d => d.data());
+          const allFix = {};
+          fixSnap.docs.forEach(d => { allFix[d.id] = d.data(); });
+
+          // All months that have any data + current month
+          const monthSet = new Set([
+            ...allVar.map(e => e.month),
+            ...Object.keys(allFix),
+            monthKey(),
+          ]);
+          const months = Array.from(monthSet).sort((a, b) => b.localeCompare(a));
+
+          _summaries = months.map(m => {
+            const fix  = allFix[m] || {};
+            const vars = allVar.filter(e => e.month === m);
+
+            const fixBreak = {};
+            FIXED_CATS.forEach(c => { fixBreak[c.id] = fix[c.id] || 0; });
+            const fixTotal = FIXED_CATS.reduce((s, c) => s + (fix[c.id] || 0), 0);
+
+            const varBreak = {};
+            CATS.forEach(c => { varBreak[c.id] = 0; });
+            vars.forEach(e => { if (e.category in varBreak) varBreak[e.category] += e.amount; });
+            const varTotal = vars.reduce((s, e) => s + e.amount, 0);
+
+            return { month: m, fixTotal, varTotal, total: fixTotal + varTotal, fixBreak, varBreak };
+          });
+
+          renderSummaryFiltered();
+        } catch (e) {
+          console.error(e);
+          toast("Could not load summary.");
+        }
+        showLoad(false);
+      }
+
+      function sumFilterBy(cat) {
+        sumFilterCat = cat;
+        document.querySelectorAll("#sumFilterChips .chip").forEach(b =>
+          b.classList.toggle("active", b.dataset.cat === cat)
+        );
+        renderSummaryFiltered();
+      }
+
+      function renderSummaryFiltered() {
+        const container = document.getElementById("summaryList");
+        if (_summaries.length === 0) {
+          container.innerHTML = '<div class="empty-msg">No data yet.</div>';
+          return;
+        }
+
+        container.innerHTML = _summaries.map(s => {
+          const [y, m] = s.month.split("-");
+          const label  = MN[parseInt(m) - 1] + " " + y;
+
+          // When a specific variable category is selected, show only its amount
+          let displayTotal = s.total;
+          if (sumFilterCat !== "all") {
+            displayTotal = s.varBreak[sumFilterCat] || 0;
+          }
+
+          const pct      = Math.min(displayTotal / INCOME * 100, 100);
+          const barColor = pct > 90 ? "#ef4444" : pct > 70 ? "#f97316" : "#7c3aed";
+
+          // Build breakdown rows
+          const fixRows = FIXED_CATS
+            .filter(c => s.fixBreak[c.id] > 0)
+            .map(c => `<div class="smb-row">
+              <span class="smb-dot" style="background:${c.color}"></span>
+              ${c.icon}
+              <span class="smb-name">${c.label}</span>
+              <span class="smb-amt">&#8377;${inr(s.fixBreak[c.id])}</span>
+            </div>`);
+
+          const varRows = CATS
+            .filter(c => sumFilterCat === "all" ? s.varBreak[c.id] > 0 : c.id === sumFilterCat)
+            .map(c => `<div class="smb-row">
+              <span class="smb-dot" style="background:${c.color}"></span>
+              ${c.icon}
+              <span class="smb-name">${c.label}</span>
+              <span class="smb-amt">&#8377;${inr(s.varBreak[c.id] || 0)}</span>
+            </div>`);
+
+          const divider = (fixRows.length > 0 && varRows.length > 0)
+            ? `<hr class="smb-divider">` : "";
+          const breakHtml = (fixRows.length + varRows.length > 0)
+            ? fixRows.join("") + divider + varRows.join("")
+            : '<div style="font-size:13px;color:#9ca3af;padding:4px 0">No data for this month</div>';
+
+          return `
+            <div class="smc">
+              <div class="smc-top" onclick="toggleSMC(this)">
+                <div>
+                  <div class="smc-month">${label}</div>
+                  <div class="smc-total">Total: &#8377;${inr(displayTotal)}</div>
+                </div>
+                <div style="text-align:right">
+                  <div class="smc-pct" style="color:${barColor}">${Math.round(pct)}%</div>
+                  <div class="smc-arrow">&#8250;</div>
+                </div>
+              </div>
+              <div class="smc-bar">
+                <div class="smc-fill" style="width:${pct}%;background:${barColor}"></div>
+              </div>
+              <div class="smc-break" style="display:none">${breakHtml}</div>
+            </div>`;
+        }).join("");
+      }
+
+      function toggleSMC(el) {
+        const brk   = el.parentElement.querySelector(".smc-break");
+        const arrow = el.querySelector(".smc-arrow");
+        const open  = brk.style.display !== "none";
+        brk.style.display  = open ? "none" : "block";
+        arrow.innerHTML    = open ? "&#8250;" : "&#8964;";
+      }
+
+      // ── HELPERS ──
+      function todayStr() {
+        return new Date().toISOString().split("T")[0];
+      }
+
+      function fmtDate(str) {
+        if (!str) return "";
+        const p = str.split("-");
+        if (p.length < 3) return str;
+        return parseInt(p[2]) + "\n" + MNS[parseInt(p[1]) - 1];
+      }
+
+      function inr(n) {
+        return Number(n).toLocaleString("en-IN");
+      }
+
+      function esc(s) {
+        return (s || "")
+          .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+      }
+
+      function showLoad(show) {
+        document.getElementById("loadingOverlay").style.display = show ? "flex" : "none";
+      }
+
+      let _toastTimer;
+      function toast(msg) {
+        const el = document.getElementById("toast");
+        el.textContent = msg;
+        el.classList.add("show");
+        clearTimeout(_toastTimer);
+        _toastTimer = setTimeout(() => el.classList.remove("show"), 2500);
+      }
+    </script>
+  </body>
+</html>
